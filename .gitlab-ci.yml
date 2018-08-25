@@ -15,3 +15,7 @@ build:
   - docker
   script:
   - ./build.sh
+  artifacts:
+    paths:
+    - build/dist/
+    expire_in: 4 weeks

@@ -7,13 +7,13 @@ set -o pipefail
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE}")
 BUILD_DIR="${SCRIPT_ROOT}/build"
 
-docker run --rm --privileged multiarch/qemu-user-static:register
+docker run --rm --privileged multiarch/qemu-user-static:register 2> /dev/null || true
 
 if ! [[ -x "${SCRIPT_ROOT}/qemu-arm-static" ]]; then
     curl -sL https://github.com/multiarch/qemu-user-static/releases/download/v2.12.0-1/x86_64_qemu-arm-static.tar.gz | tar xz -C "${SCRIPT_ROOT}"
 fi
 
-for docker_arch in amd64 arm32v7; do
+for docker_arch in arm32v7 amd64; do
   case ${docker_arch} in
     amd64   ) qemu_arch="x86_64" debian_arch="amd64" ;;
     arm32v7 ) qemu_arch="arm" debian_arch="armhf" ;;
@@ -30,5 +30,7 @@ for docker_arch in amd64 arm32v7; do
   else
     sed -i "s/__CROSS_//g" "${docker_file}"
   fi
-  docker build -f "${docker_file}" .
+  docker build -f "${docker_file}" -t "yasdi_exporter:build-${docker_arch}" .
+  mkdir -p "${SCRIPT_ROOT}/build/dist/${docker_arch}"
+  docker run --rm "yasdi_exporter:build-${docker_arch}" /bin/bash -c "find /usr/src -type f -maxdepth 1 | xargs tar c --transform 's/.*\///g' yasdi_exporter" | tar xv -C "${SCRIPT_ROOT}/build/dist/${docker_arch}"
 done
