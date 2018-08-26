@@ -9,6 +9,7 @@ package yasdi
 import "C"
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -109,7 +110,7 @@ func (yc *Connection) Initialize() error {
 	return nil
 }
 
-func (yc *Connection) DetectDevices(device_count int) error {
+func (yc *Connection) DetectDevices(device_count int, stopCh chan struct{}) error {
 
 	ret_val := C.DoStartDeviceDetection(C.int(device_count), C.BOOL(0))
 	yc.log.Debugf("started detection for %d device(s) ret_val=%d", device_count, ret_val)
@@ -140,7 +141,12 @@ func (yc *Connection) DetectDevices(device_count int) error {
 			}
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-time.Tick(100 * time.Millisecond):
+			break
+		case <-stopCh:
+			return errors.New("detection terminated")
+		}
 		tries += 1
 	}
 

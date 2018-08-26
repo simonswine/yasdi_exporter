@@ -69,7 +69,6 @@ func (y *YasdiExporter) Run() error {
 		if y.stopCh != nil {
 			y.log.Infof("received signal (%v), stopping", sig)
 			close(y.stopCh)
-			y.stopCh = nil
 		}
 	}()
 
@@ -77,8 +76,8 @@ func (y *YasdiExporter) Run() error {
 	y.metrics = metrics.New(y.log)
 	wg.Add(1)
 	go func() {
-		y.metrics.Addr = y.metricsAddr
 		defer wg.Done()
+		y.metrics.Addr = y.metricsAddr
 		y.metrics.Start(y.stopCh)
 	}()
 
@@ -92,68 +91,101 @@ func (y *YasdiExporter) Run() error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for {
-			y.conn, err = yasdi.NewConnection(y.log, &y.yasdi)
-			if err != nil {
-				y.log.Errorf("error connecting to yasdi: %s", err)
-				continue
-			}
-
-			err = y.conn.Initialize()
-			if err != nil {
-				y.log.Errorf("error intialising connection to yasdi: %s", err)
-				continue
-			}
-			defer y.conn.Shutdown()
-
-			err = y.conn.DetectDevices(2)
-			if err != nil {
-				y.log.Errorf("error detecting 2 devices: %s", err)
-				continue
-			}
-
-			influxClient, err := influxdb.NewInfluxDB(y.influxdbURL)
-			if err != nil {
-				y.log.Errorf("error reporting to influxdb: %s", err)
-				continue
-			}
-
-			for {
-				var values []int64
-				var serials []string
-				for _, device := range y.conn.DeviceHandles {
-					status, err := device.Status()
-					if err != nil {
-						device.Log().Errorf("unable to get status: %s", err)
-					} else {
-						device.Log().Infof("status: %s", status)
-					}
-
-					totalYield, err := device.TotalYield()
-					if err != nil {
-						device.Log().Errorf("unable to get total yield: %s", err)
-						continue
-					}
-					values = append(values, totalYield)
-					serials = append(serials, fmt.Sprintf("%d", device.Serial))
-					device.Log().Infof("total yield: %d", totalYield)
-				}
-				if len(values) > 0 {
-					err := influxClient.SendValues(serials, values)
-					if err != nil {
-						y.log.Errorf("unable to send data to influx: %s", err)
-					}
-				}
-				time.Sleep(150 * time.Second)
-			}
-		}
-
+		y.yasdiLoop()
 	}()
 
 	wg.Wait()
 
 	return err
 
+}
+
+func (y *YasdiExporter) yasdiLoop() {
+	firstRun := make(chan struct{}, 1)
+	firstRun <- struct{}{}
+	for {
+		select {
+		case <-y.stopCh:
+			return
+		case <-time.Tick(60 * time.Second):
+			// TODO: this should be exponentially growing
+			break
+		case <-firstRun:
+			break
+		}
+		if err := y.yasdiConnect(); err != nil {
+			y.log.Error(err)
+		}
+	}
+}
+
+func (y *YasdiExporter) yasdiConnect() (err error) {
+	y.conn, err = yasdi.NewConnection(y.log, &y.yasdi)
+	if err != nil {
+		return fmt.Errorf("error connecting to yasdi: %s", err)
+	}
+
+	err = y.conn.Initialize()
+	if err != nil {
+		return fmt.Errorf("error initialising connection to yasdi: %s", err)
+	}
+	defer y.conn.Shutdown()
+
+	err = y.conn.DetectDevices(2, y.stopCh)
+	if err != nil {
+		return fmt.Errorf("error detecting 2 devices: %s", err)
+	}
+
+	influxClient, err := influxdb.NewInfluxDB(y.influxdbURL)
+	if err != nil {
+		return fmt.Errorf("error reporting to influxdb: %s", err)
+	}
+
+	firstRun := make(chan struct{}, 1)
+	firstRun <- struct{}{}
+	for {
+		select {
+		case <-y.stopCh:
+			return nil
+		case <-time.Tick(150 * time.Second):
+			break
+		case <-firstRun:
+			break
+		}
+		y.yasdiMeasure(influxClient)
+	}
+
+	return nil
+}
+
+func (y *YasdiExporter) yasdiMeasure(influxClient *influxdb.InfluxDB) {
+	var values []int64
+	var serials []string
+	for _, device := range y.conn.DeviceHandles {
+		status, err := device.Status()
+		if err != nil {
+			device.Log().Errorf("unable to get status: %s", err)
+		} else {
+			device.Log().Infof("status: %s", status)
+		}
+
+		serial := fmt.Sprintf("%d", device.Serial)
+
+		totalYield, err := device.TotalYield()
+		if err != nil {
+			device.Log().Errorf("unable to get total yield: %s", err)
+			continue
+		}
+		values = append(values, totalYield)
+		serials = append(serials, fmt.Sprintf("%d", device.Serial))
+		device.Log().Infof("total yield: %d", totalYield)
+	}
+	if len(values) > 0 {
+		err := influxClient.SendValues(serials, values)
+		if err != nil {
+			y.log.Errorf("unable to send data to influx: %s", err)
+		}
+	}
 }
 
 func main() {
