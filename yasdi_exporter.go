@@ -171,6 +171,24 @@ func (y *YasdiExporter) yasdiMeasure(influxClient *influxdb.InfluxDB) {
 
 		serial := fmt.Sprintf("%d", device.Serial)
 
+		// export grid measurements
+		for _, m := range []struct {
+			source func() (float64, error)
+			sink   func(float64)
+		}{
+			{
+				device.GridFrequency,
+				y.metrics.GridFrequency.WithLabelValues(serial).Observe,
+			},
+		} {
+			val, err := m.source()
+			if err != nil {
+				device.Log().Warnf("unable to get value: %s", err)
+			} else {
+				m.sink(val)
+			}
+		}
+
 		totalYield, err := device.TotalYield()
 		if err != nil {
 			device.Log().Errorf("unable to get total yield: %s", err)

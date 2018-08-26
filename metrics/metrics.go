@@ -18,9 +18,12 @@ type Metrics struct {
 	http.Server
 	log *logrus.Entry
 
-	registry     *prometheus.Registry
-	Yield        *prometheus.CounterVec
-	TimeOnStatus *prometheus.CounterVec
+	registry      *prometheus.Registry
+	Yield         *prometheus.CounterVec
+	TimeOnStatus  *prometheus.CounterVec
+	GridVoltage   *prometheus.SummaryVec
+	GridPower     *prometheus.SummaryVec
+	GridFrequency *prometheus.SummaryVec
 }
 
 type loggingResponseWriter struct {
@@ -87,11 +90,38 @@ func New(log *logrus.Entry) *Metrics {
 			},
 			[]string{"serial", "status"},
 		),
+		GridVoltage: prometheus.NewSummaryVec(
+			prometheus.SummaryOpts{
+				Namespace: namespace,
+				Name:      "grid_voltage",
+				Help:      "Voltage of the grid in Volts.",
+			},
+			[]string{"serial"},
+		),
+		GridPower: prometheus.NewSummaryVec(
+			prometheus.SummaryOpts{
+				Namespace: namespace,
+				Name:      "grid_power",
+				Help:      "Power delivered into the grid in Watts.",
+			},
+			[]string{"serial"},
+		),
+		GridFrequency: prometheus.NewSummaryVec(
+			prometheus.SummaryOpts{
+				Namespace: namespace,
+				Name:      "grid_frequency",
+				Help:      "Frequency of the grid in Hertz.",
+			},
+			[]string{"serial"},
+		),
 		registry: prometheus.NewRegistry(),
 	}
 
 	m.registry.MustRegister(m.Yield)
 	m.registry.MustRegister(m.TimeOnStatus)
+	m.registry.MustRegister(m.GridVoltage)
+	m.registry.MustRegister(m.GridPower)
+	m.registry.MustRegister(m.GridFrequency)
 	m.registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
 	m.registry.MustRegister(prometheus.NewGoCollector())
 

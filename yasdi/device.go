@@ -148,6 +148,30 @@ func (d *Device) ChannelHandles() ([]uint, error) {
 	return d.channelHandles, nil
 }
 
+func (d *Device) GridVoltage() (float64, error) {
+	value, _, err := d.ChannelValue("Uac")
+	if err != nil {
+		return 0, err
+	}
+	return value, nil
+}
+
+func (d *Device) GridPower() (float64, error) {
+	value, _, err := d.ChannelValue("Pac")
+	if err != nil {
+		return 0, err
+	}
+	return value, nil
+}
+
+func (d *Device) GridFrequency() (float64, error) {
+	value, _, err := d.ChannelValue("Fac")
+	if err != nil {
+		return 0, err
+	}
+	return value, nil
+}
+
 func (d *Device) TotalYield() (int64, error) {
 	value, _, err := d.ChannelValue("E-Total")
 	if err != nil {
