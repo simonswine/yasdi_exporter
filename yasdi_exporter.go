@@ -256,6 +256,12 @@ func (y *YasdiExporter) yasdiMeasure(influxClient *influxdb.InfluxDB) {
 			device.Log().Errorf("unable to get total yield: %s", err)
 			continue
 		}
+		if totalYield <= 0 {
+			device.Log().Warn("yield value <= 0 reported")
+			continue
+		}
+		y.metrics.Yield.WithLabelValues(serial).Set(float64(totalYield))
+
 		values = append(values, totalYield)
 		serials = append(serials, fmt.Sprintf("%d", device.Serial))
 		device.Log().Infof("total yield: %d", totalYield)
