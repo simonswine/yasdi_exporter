@@ -26,6 +26,27 @@ var rootCmd = &cobra.Command{
 
 var yasdiExporter = &YasdiExporter{}
 
+var yasdiStatus = map[string]string{
+	"Offline":        "offline", // no connection to the inverter
+	"Offset":         "offset-adjustment",
+	"Stop":           "stop",
+	"Netzueb.":       "mains-supervision",
+	"Warten":         "idle",
+	"U-Konst":        "constant-voltage",
+	"I-Konst":        "constant-current",
+	"Mpp-Such":       "mpp-adjustment",
+	"Mpp":            "mpp", // healty
+	"Stoer.":         "disturbance",
+	"Fehler":         "fault",
+	"Serientest BFS": "series-testing-bfs",
+	"Stat Res 2":     "stat-res-2",
+	"Zuschalt.":      "connection",
+	"Uac / Rel":      "uac-rel",
+	"Stop 1":         "stop-1",
+	"Calib":          "calibration",
+	"Unknown":        "unknown",
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(&yasdiExporter.yasdi.Device, "device", "/dev/ttyUSB0", "serial device to connect to")
 	rootCmd.PersistentFlags().StringVar(&yasdiExporter.yasdi.Protocol, "protocol", "SunnyNet", "serial device to connect to")
@@ -43,6 +64,12 @@ type YasdiExporter struct {
 	stopCh  chan struct{}
 	conn    *yasdi.Connection
 
+	// how often should the invert be queried
+	frequency time.Duration
+
+	// store the last status update per inverter
+	lastStatusUpdate map[uint]time.Time
+
 	// arguments
 	yasdi yasdi.ConnectionSettings
 
@@ -54,6 +81,9 @@ type YasdiExporter struct {
 func (y *YasdiExporter) Run() error {
 	var err error
 	var wg sync.WaitGroup
+
+	y.frequency = 30 * time.Second
+	y.lastStatusUpdate = make(map[uint]time.Time)
 
 	y.stopCh = make(chan struct{})
 	logger := logrus.New()
@@ -82,8 +112,6 @@ func (y *YasdiExporter) Run() error {
 	}()
 
 	// TODO: detect inverts or create and search for them
-
-	// TODO: register all statuses
 
 	// TODO: handle non monotonous yield
 
@@ -147,7 +175,7 @@ func (y *YasdiExporter) yasdiConnect() (err error) {
 		select {
 		case <-y.stopCh:
 			return nil
-		case <-time.Tick(150 * time.Second):
+		case <-time.Tick(y.frequency):
 			break
 		case <-firstRun:
 			break
@@ -167,9 +195,31 @@ func (y *YasdiExporter) yasdiMeasure(influxClient *influxdb.InfluxDB) {
 			device.Log().Errorf("unable to get status: %s", err)
 		} else {
 			device.Log().Infof("status: %s", status)
+			status = "Offline"
 		}
 
+		statusLabel, ok := yasdiStatus[status]
+		if !ok {
+			statusLabel = "unknown"
+		}
+
+		// calculate time on status
+		now := time.Now()
+		var diff time.Duration
+		if last, ok := y.lastStatusUpdate[device.Serial]; ok {
+			diff = now.Sub(last)
+		}
+		y.lastStatusUpdate[device.Serial] = now
+
+		// report for all status
 		serial := fmt.Sprintf("%d", device.Serial)
+		for _, status := range yasdiStatus {
+			d := 0.0
+			if statusLabel == status {
+				d = diff.Seconds()
+			}
+			y.metrics.TimeOnStatus.WithLabelValues(serial, status).Add(d)
+		}
 
 		// export grid measurements
 		for _, m := range []struct {
