@@ -1,4 +1,4 @@
-FROM __BASEIMAGE_ARCH__/golang:1.10.3-stretch
+FROM __BASEIMAGE_ARCH__/golang:1.12.2-stretch
 
 __CROSS_COPY qemu-__QEMU_ARCH__-static /usr/bin/
 
