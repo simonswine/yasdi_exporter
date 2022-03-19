@@ -10,8 +10,6 @@ import (
 )
 
 type InfluxDB struct {
-	influxDBClient *influxdb.Client
-
 	InfluxDBUsername    string
 	InfluxDBPassword    string
 	InfluxDBName        string
@@ -86,7 +84,7 @@ func (o *InfluxDB) SendValues(serials []string, values []int64) error {
 	}
 
 	// Create a point each and add to batch
-	for pos, _ := range values {
+	for pos := range values {
 		tags := map[string]string{
 			"serial": serials[pos],
 		}
