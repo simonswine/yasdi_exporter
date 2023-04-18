@@ -193,9 +193,9 @@ func (y *YasdiExporter) yasdiMeasure(influxClient *influxdb.InfluxDB) {
 		status, err := device.Status()
 		if err != nil {
 			device.Log().Errorf("unable to get status: %s", err)
+			status = "Offline"
 		} else {
 			device.Log().Infof("status: %s", status)
-			status = "Offline"
 		}
 
 		statusLabel, ok := yasdiStatus[status]
