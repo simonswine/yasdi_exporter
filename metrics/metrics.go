@@ -19,7 +19,7 @@ type Metrics struct {
 	log *logrus.Entry
 
 	registry      *prometheus.Registry
-	Yield         *prometheus.CounterVec
+	Yield         *prometheus.GaugeVec
 	TimeOnStatus  *prometheus.CounterVec
 	GridVoltage   *prometheus.SummaryVec
 	GridPower     *prometheus.SummaryVec
@@ -74,8 +74,8 @@ func New(log *logrus.Entry) *Metrics {
 		Server: http.Server{
 			Handler: router,
 		},
-		Yield: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
+		Yield: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "yield_total",
 				Help:      "Total yield of the inverter in Wh.",
@@ -122,7 +122,7 @@ func New(log *logrus.Entry) *Metrics {
 	m.registry.MustRegister(m.GridVoltage)
 	m.registry.MustRegister(m.GridPower)
 	m.registry.MustRegister(m.GridFrequency)
-	m.registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	m.registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	m.registry.MustRegister(prometheus.NewGoCollector())
 
 	router.Handle("/metrics", promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{}))

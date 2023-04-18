@@ -1,4 +1,4 @@
-FROM __BASEIMAGE_ARCH__/golang:1.12.2-stretch
+FROM __BASEIMAGE_ARCH__/golang:1.20.3-bullseye
 
 __CROSS_COPY qemu-__QEMU_ARCH__-static /usr/bin/
 
@@ -12,14 +12,10 @@ RUN git clone https://github.com/simonswine/libyasdi.git /usr/src/libyasdi && \
     dpkg-buildpackage -d && \
     dpkg -i /usr/src/libyasdi1_1.8.1.9.1___DEBIAN_ARCH__.deb /usr/src/libyasdi-dev_1.8.1.9.1___DEBIAN_ARCH__.deb /usr/src/yasdishell_1.8.1.9.1___DEBIAN_ARCH__.deb
 
-RUN curl -sL -o /usr/local/bin/dep https://github.com/golang/dep/releases/download/v0.5.0/dep-linux-amd64 && \
-    echo "287b08291e14f1fae8ba44374b26a2b12eb941af3497ed0ca649253e21ba2f83  /usr/local/bin/dep" | sha256sum -c && \
-    chmod +x /usr/local/bin/dep
-
 WORKDIR /go/src/github.com/simonswine/yasdi_exporter
 
-ADD Gopkg.toml Gopkg.lock ./
-RUN dep ensure -vendor-only
+ADD go.mod go.sum ./
+RUN go mod download
 
 ADD . ./
 
